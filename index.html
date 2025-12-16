@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>FreshChain Traceability</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px;
+            background: #f9f9f9;
+        }
+        
+        h1 {
+            color: #2a7ae2;
+        }
+        
+        button {
+            padding: 10px 15px;
+            margin: 5px 0;
+            background: #2a7ae2;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #1f5bbf;
+        }
+        
+        input,
+        select {
+            padding: 8px;
+            margin: 5px 0;
+            width: 220px;
+        }
+        
+        #menu {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+        
+        p {
+            margin: 5px 0;
+        }
+        
+        canvas {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>FreshChain Food Traceability</h1>
+
+    <button id="connectWalletBtn">Connect Wallet</button>
+    <p id="walletAddress"></p>
+
+    <label for="userType">Select User Type:</label>
+    <select id="userType">
+    <option value="">--Choose--</option>
+    <option value="admin">Admin</option>
+    <option value="producer">Producer</option>
+    <option value="transporter">Transporter</option>
+    <option value="distributor">Distributor</option>
+    <option value="retailer">Retailer</option>
+    <option value="customer">Customer</option>
+</select>
+
+    <div id="menu"></div>
+
+    <script>
+        let provider, signer, contract, userAddress;
+
+        const contractAddress = "0xdB244f39614F42f17C5db403f9203CF6B7F043df";
+        const contractABI = [{
+            "inputs": [],
+            "stateMutability": "nonpayable",
+            "type": "constructor"
+        }, {
+            "anonymous": false,
+            "inputs": [{
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "batchId",
+                "type": "uint256"
+            }, {
+                "indexed": false,
+                "internalType": "string",
+                "name": "productName",
+                "type": "string"
+            }, {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "quantity",
+                "type": "uint256"
+            }],
+            "name": "BatchCreated",
+            "type": "event"
+        }, {
+            "anonymous": false,
+            "inputs": [{
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "batchId",
+                "type": "uint256"
+            }, {
+                "indexed": false,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }],
+            "name": "OwnershipTransferred",
+            "type": "event"
+        }, {
+            "anonymous": false,
+            "inputs": [{
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "batchId",
+                "type": "uint256"
+            }, {
+                "indexed": false,
+                "internalType": "int256",
+                "name": "temperature",
+                "type": "int256"
+            }, {
+                "indexed": false,
+                "internalType": "int256",
+                "name": "humidity",
+                "type": "int256"
+            }, {
+                "indexed": false,
+                "internalType": "string",
+                "name": "location",
+                "type": "string"
+            }],
+            "name": "SensorDataAdded",
+            "type": "event"
+        }, {
+            "inputs": [{
+                "internalType": "uint256",
+                "name": "_batchId",
+                "type": "uint256"
+            }, {
+                "internalType": "string",
+                "name": "_productName",
+                "type": "string"
+            }, {
+                "internalType": "uint256",
+                "name": "_quantity",
+                "type": "uint256"
+            }],
+            "name": "createBatch",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "uint256",
+                "name": "_batchId",
+                "type": "uint256"
+            }, {
+                "internalType": "int256",
+                "name": "_temperature",
+                "type": "int256"
+            }, {
+                "internalType": "int256",
+                "name": "_humidity",
+                "type": "int256"
+            }, {
+                "internalType": "string",
+                "name": "_location",
+                "type": "string"
+            }],
+            "name": "addSensorData",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "uint256",
+                "name": "_batchId",
+                "type": "uint256"
+            }, {
+                "internalType": "address",
+                "name": "_newOwner",
+                "type": "address"
+            }],
+            "name": "transferOwnership",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "uint256",
+                "name": "_batchId",
+                "type": "uint256"
+            }, {
+                "internalType": "bool",
+                "name": "_passedInspection",
+                "type": "bool"
+            }],
+            "name": "markAsArrived",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "uint256",
+                "name": "_batchId",
+                "type": "uint256"
+            }],
+            "name": "getBatchHistory",
+            "outputs": [{
+                "internalType": "string",
+                "name": "productName",
+                "type": "string"
+            }, {
+                "internalType": "uint256",
+                "name": "quantity",
+                "type": "uint256"
+            }, {
+                "internalType": "address",
+                "name": "currentOwner",
+                "type": "address"
+            }, {
+                "internalType": "bool",
+                "name": "arrived",
+                "type": "bool"
+            }, {
+                "internalType": "bool",
+                "name": "inspectionPassed",
+                "type": "bool"
+            }],
+            "stateMutability": "view",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "address",
+                "name": "_p",
+                "type": "address"
+            }],
+            "name": "registerProducer",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "address",
+                "name": "_t",
+                "type": "address"
+            }],
+            "name": "registerTransporter",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "address",
+                "name": "_d",
+                "type": "address"
+            }],
+            "name": "registerDistributor",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }, {
+            "inputs": [{
+                "internalType": "address",
+                "name": "_r",
+                "type": "address"
+            }],
+            "name": "registerRetailer",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }];
+
+        // --- Connect Wallet ---
+        const connectBtn = document.getElementById("connectWalletBtn");
+        const walletAddressP = document.getElementById("walletAddress");
+        const menuDiv = document.getElementById("menu");
+        const userTypeSelect = document.getElementById("userType");
+
+        connectBtn.onclick = async() => {
+            if (!window.ethereum) return alert("Install MetaMask!");
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            await provider.send("eth_requestAccounts", []);
+            signer = provider.getSigner();
+            userAddress = await signer.getAddress();
+            walletAddressP.innerText = "Connected: " + userAddress;
+
+            contract = new ethers.Contract(contractAddress, contractABI, signer);
+            menuDiv.style.display = "block";
+        };
+
+        // --- User Role Menu ---
+        userTypeSelect.onchange = () => {
+            menuDiv.innerHTML = "";
+            if (!contract) {
+                alert("Connect wallet first!");
+                return;
+            }
+            const type = userTypeSelect.value;
+            if (type === "admin") showAdminMenu();
+            if (type === "producer") showProducerMenu();
+            if (type === "transporter") showTransporterMenu();
+            if (type === "distributor") showDistributorMenu();
+            if (type === "retailer") showRetailerMenu();
+            if (type === "customer") showCustomerMenu();
+        };
+
+        // --- Admin Menu ---
+        function showAdminMenu() {
+            menuDiv.innerHTML = `
+        <h2>Admin Actions</h2>
+        <input type="text" id="actorAddress" placeholder="Actor Address">
+        <select id="actorRole">
+            <option value="producer">Producer</option>
+            <option value="transporter">Transporter</option>
+            <option value="distributor">Distributor</option>
+            <option value="retailer">Retailer</option>
+        </select>
+        <button id="registerBtn">Register Actor</button>
+        <p id="adminStatus"></p>
+    `;
+            document.getElementById("registerBtn").onclick = async() => {
+                const addr = document.getElementById("actorAddress").value;
+                const role = document.getElementById("actorRole").value;
+
+                if (!ethers.utils.isAddress(addr)) {
+                    document.getElementById("adminStatus").innerText = "Invalid Ethereum address!";
+                    return;
+                }
+
+                try {
+                    const contractWithSigner = new ethers.Contract(contractAddress, contractABI, signer);
+                    let tx;
+                    switch (role) {
+                        case "producer":
+                            tx = await contractWithSigner.registerProducer(addr);
+                            break;
+                        case "transporter":
+                            tx = await contractWithSigner.registerTransporter(addr);
+                            break;
+                        case "distributor":
+                            tx = await contractWithSigner.registerDistributor(addr);
+                            break;
+                        case "retailer":
+                            tx = await contractWithSigner.registerRetailer(addr);
+                            break;
+                    }
+                    await tx.wait();
+                    document.getElementById("adminStatus").innerText = `Actor ${role} registered successfully!`;
+                } catch (err) {
+                    console.error(err);
+                    document.getElementById("adminStatus").innerText = "Error: " + err.message;
+                }
+            };
+        }
+
+        // --- Producer Menu ---
+        function showProducerMenu() {
+            menuDiv.innerHTML = `
+        <h2>Producer Actions</h2>
+        <input type="number" id="batchId" placeholder="Batch ID">
+        <input type="text" id="productName" placeholder="Product Name">
+        <input type="number" id="quantity" placeholder="Quantity">
+        <button id="createBatchBtn">Create Batch</button>
+        <p id="producerStatus"></p>
+    `;
+            document.getElementById("createBatchBtn").onclick = async() => {
+                const batchId = parseInt(document.getElementById("batchId").value);
+                const name = document.getElementById("productName").value;
+                const qty = parseInt(document.getElementById("quantity").value);
+                try {
+                    const tx = await contract.createBatch(batchId, name, qty);
+                    await tx.wait();
+                    document.getElementById("producerStatus").innerText = "Batch created!";
+                } catch (err) {
+                    document.getElementById("producerStatus").innerText = "Error: " + err.message;
+                }
+            };
+            document.getElementById("createBatchBtn").onclick = async() => {
+                const batchId = parseInt(document.getElementById("batchId").value);
+                const name = document.getElementById("productName").value;
+                const qty = parseInt(document.getElementById("quantity").value);
+                try {
+                    const batch = await contract.getBatchHistory(batchId);
+                    if (batch.productName) {
+                        document.getElementById("producerStatus").innerText = "Error: Batch ID already exists!";
+                        return;
+                    }
+                } catch (err) {
+                    // batch doesn't exist yet, continue
+                }
+                try {
+                    const tx = await contract.createBatch(batchId, name, qty);
+                    await tx.wait();
+                    document.getElementById("producerStatus").innerText = "Batch created!";
+                } catch (err) {
+                    document.getElementById("producerStatus").innerText = "Error: " + err.message;
+                }
+            };
+
+        }
+
+        // --- Transporter Menu ---
+        function showTransporterMenu() {
+            menuDiv.innerHTML = `
+        <h2>Transporter Actions</h2>
+        <input type="number" id="batchIdT" placeholder="Batch ID">
+        <input type="number" id="temperature" placeholder="Temperature">
+        <input type="number" id="humidity" placeholder="Humidity">
+        <input type="text" id="location" placeholder="Location">
+        <button id="addSensorBtn">Add Sensor Data</button>
+        <p id="transporterStatus"></p>
+    `;
+            document.getElementById("addSensorBtn").onclick = async() => {
+                const batchId = parseInt(document.getElementById("batchIdT").value);
+                const temp = parseInt(document.getElementById("temperature").value);
+                const hum = parseInt(document.getElementById("humidity").value);
+                const loc = document.getElementById("location").value;
+                try {
+                    const tx = await contract.addSensorData(batchId, temp, hum, loc);
+                    await tx.wait();
+                    document.getElementById("transporterStatus").innerText = "Sensor data added!";
+                } catch (err) {
+                    document.getElementById("transporterStatus").innerText = "Error: " + err.message;
+                }
+            };
+        }
+
+        // --- Distributor Menu ---
+        function showDistributorMenu() {
+            menuDiv.innerHTML = `
+        <h2>Distributor Actions</h2>
+        <input type="number" id="batchIdD" placeholder="Batch ID">
+        <input type="text" id="newOwnerD" placeholder="New Owner Address">
+        <button id="transferBtnD">Transfer Ownership</button>
+        <p id="distributorStatus"></p>
+    `;
+            document.getElementById("transferBtnD").onclick = async() => {
+                const batchId = parseInt(document.getElementById("batchIdD").value);
+                const newOwner = document.getElementById("newOwnerD").value;
+                try {
+                    const tx = await contract.transferOwnership(batchId, newOwner);
+                    await tx.wait();
+                    document.getElementById("distributorStatus").innerText = "Ownership transferred!";
+                } catch (err) {
+                    document.getElementById("distributorStatus").innerText = "Error: " + err.message;
+                }
+            };
+        }
+
+        // --- Retailer Menu ---
+        function showRetailerMenu() {
+            menuDiv.innerHTML = `
+        <h2>Retailer Actions</h2>
+        <input type="number" id="batchIdR" placeholder="Batch ID">
+        <select id="inspection">
+            <option value="true">Passed</option>
+            <option value="false">Failed</option>
+        </select>
+        <button id="arriveBtn">Mark as Arrived</button>
+        <p id="retailerStatus"></p>
+    `;
+            document.getElementById("arriveBtn").onclick = async() => {
+                const batchId = parseInt(document.getElementById("batchIdR").value);
+                const passed = document.getElementById("inspection").value === "true";
+                try {
+                    const tx = await contract.markAsArrived(batchId, passed);
+                    await tx.wait();
+                    document.getElementById("retailerStatus").innerText = "Batch marked as arrived!";
+                } catch (err) {
+                    document.getElementById("retailerStatus").innerText = "Error: " + err.message;
+                }
+            };
+        }
+
+        // --- Customer Menu ---
+        function showCustomerMenu() {
+            menuDiv.innerHTML = `
+        <h2>Customer View</h2>
+        <input type="number" id="viewBatchId" placeholder="Enter Batch ID">
+        <button id="viewBatchBtn">View Batch</button>
+        <div id="batchInfo"></div>
+        <canvas id="qrCode"></canvas>
+    `;
+            document.getElementById("viewBatchBtn").onclick = async() => {
+                const batchId = parseInt(document.getElementById("viewBatchId").value);
+                try {
+                    const batch = await contract.getBatchHistory(batchId);
+                    let info = `
+                <p>Product: ${batch.productName}</p>
+                <p>Quantity: ${batch.quantity}</p>
+                <p>Current Owner: ${batch.currentOwner}</p>
+                <p>Arrived: ${batch.arrived}</p>
+                <p>Passed Inspection: ${batch.inspectionPassed}</p>
+            `;
+                    document.getElementById("batchInfo").innerHTML = info;
+                    QRCode.toCanvas(document.getElementById("qrCode"), `BatchID:${batchId}`, err => {
+                        if (err) console.error(err);
+                    });
+                } catch (err) {
+                    document.getElementById("batchInfo").innerText = "Error: " + err.message;
+                }
+            };
+        }
+
+
+
+        // Replace these addresses with your actual MetaMask accounts
+        const producerAddress = "0x05FAAE1702f6735568f692AF6c0A03BaCA4B61Fe";
+        const transporterAddress = "0x1f52eCA955C6316B3856d8f512ad8715A717473C";
+        const distributorAddress = "0x9538fC8862D305c54AC4F0CD6CBdeB77aa515055";
+        const retailerAddress = "0xa16fff3A9bacFa4e63BE708E80c697F6CEd81171";
+
+        async function registerActors() {
+            try {
+                // Make sure your contract instance is connected with the owner account
+                console.log("Registering Producer...");
+                let tx1 = await contract.registerProducer(producerAddress);
+                await tx1.wait();
+                console.log("Producer registered!");
+
+                console.log("Registering Transporter...");
+                let tx2 = await contract.registerTransporter(transporterAddress);
+                await tx2.wait();
+                console.log("Transporter registered!");
+
+                console.log("Registering Distributor...");
+                let tx3 = await contract.registerDistributor(distributorAddress);
+                await tx3.wait();
+                console.log("Distributor registered!");
+
+                console.log("Registering Retailer...");
+                let tx4 = await contract.registerRetailer(retailerAddress);
+                await tx4.wait();
+                console.log("Retailer registered!");
+
+                alert("All actors registered successfully!");
+            } catch (err) {
+                console.error("Error registering actors:", err.message);
+            }
+        }
+
+        // Call the function
+        registerActors();
+    </script>
+</body>
+
+</html>
